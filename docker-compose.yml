@@ -1,0 +1,161 @@
+# services:
+#   postgres:
+#     image: postgres:15-alpine
+#     container_name: smart-cdn-postgres
+#     environment:
+#       POSTGRES_USER: cdn_admin
+#       POSTGRES_PASSWORD: cdn_secure_pass_2024
+#       POSTGRES_DB: smart_cdn_db
+#     ports:
+#       - "5432:5432"
+
+#   redis:
+#     image: redis:7-alpine
+#     container_name: smart-cdn-redis
+#     ports:
+#       - "6379:6379"
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: smart-cdn-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cdn_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cdn_secure_pass_2024}
+      POSTGRES_DB: ${POSTGRES_DB:-smart_cdn_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/app/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./backend/app/views/views.sql:/docker-entrypoint-initdb.d/02-views.sql:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cdn_admin}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cdn-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: smart-cdn-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cdn-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smart-cdn-backend
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cdn_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cdn_secure_pass_2024}
+      POSTGRES_DB: ${POSTGRES_DB:-smart_cdn_db}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      BACKEND_HOST: ${BACKEND_HOST:-0.0.0.0}
+      BACKEND_PORT: ${BACKEND_PORT:-8000}
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production-min-32-chars}
+      AI_ENGINE_URL: http://ai-engine:8001
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    networks:
+      - cdn-network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  ai-engine:
+    build:
+      context: ./ai-engine
+      dockerfile: Dockerfile
+    container_name: smart-cdn-ai-engine
+    environment:
+      AI_ENGINE_HOST: ${AI_ENGINE_HOST:-0.0.0.0}
+      AI_ENGINE_PORT: ${AI_ENGINE_PORT:-8001}
+      AI_MODE: ${AI_MODE:-local}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MODEL_NAME: ${AI_MODEL_NAME:-gpt-3.5-turbo}
+      AI_MAX_TOKENS: ${AI_MAX_TOKENS:-500}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./ai-engine:/app
+    networks:
+      - cdn-network
+    command: uvicorn ai.main:app --host 0.0.0.0 --port 8001 --reload
+
+  edge-sim:
+    build:
+      context: ./edge-sim
+      dockerfile: Dockerfile
+    container_name: smart-cdn-edge-sim
+    environment:
+      EDGE_SIM_HOST: ${EDGE_SIM_HOST:-0.0.0.0}
+      EDGE_SIM_PORT: ${EDGE_SIM_PORT:-8002}
+      ORIGIN_SERVER_URL: http://backend:8000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      EDGE_REGIONS: ${EDGE_REGIONS:-us-east,us-west,eu-west}
+      EDGE_CACHE_CAPACITY_MB: ${EDGE_CACHE_CAPACITY_MB:-100}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8002:8002"
+    depends_on:
+      - backend
+      - redis
+    volumes:
+      - ./edge-sim:/app
+    networks:
+      - cdn-network
+    command: uvicorn edge.main:app --host 0.0.0.0 --port 8002 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: smart-cdn-frontend
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
+      VITE_AI_ENGINE_URL: ${VITE_AI_ENGINE_URL:-http://localhost:8001}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - cdn-network
+    command: npm run dev -- --host 0.0.0.0 --port 3000
+
+volumes:
+  postgres_data:
+  redis_data:
+
+
+networks:
+  cdn-network:
+    driver: bridge

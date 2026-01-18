@@ -1,0 +1,30 @@
+{
+    "request_logs": [
+        {
+            "content_id": "1",
+            "request_timestamp": "2024-01-01T12:00:00Z",
+            "is_cache_hit": false
+        },
+        {
+            "content_id": "1",
+            "request_timestamp": "2024-01-01T12:05:00Z",
+            "is_cache_hit": true
+        }
+    ],
+    "content_metadata": [
+        {
+            "content_id": "1",
+            "content_type": "video",
+            "size_kb": 5000,
+            "category": "entertainment"
+        }
+    ],
+    "edge_constraints": [
+        {
+            "edge_id": "edge-us-east",
+            "cache_capacity_mb": 100,
+            "current_usage_mb": 10
+        }
+    ],
+    "time_window_minutes": 60
+}

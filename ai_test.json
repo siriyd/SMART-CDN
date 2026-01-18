@@ -1,0 +1,19 @@
+{
+  "request_logs": [
+    {
+      "url": "/static/image1.jpg",
+      "timestamp": "2025-01-18T10:00:00Z",
+      "cache_status": "MISS"
+    },
+    {
+      "url": "/static/image1.jpg",
+      "timestamp": "2025-01-18T10:05:00Z",
+      "cache_status": "HIT"
+    },
+    {
+      "url": "/api/data.json",
+      "timestamp": "2025-01-18T10:10:00Z",
+      "cache_status": "MISS"
+    }
+  ]
+}
